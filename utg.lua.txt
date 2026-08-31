@@ -1,0 +1,753 @@
+-- made by yua nd sub 2 me (ts game is so fun btw)
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "yua - utg",
+    LoadingTitle = "made by yua",
+    LoadingSubtitle = "sub 2 me",
+    ConfigurationSaving = {
+        Enabled = false
+    },
+    Discord = {
+        Enabled = false
+    },
+    KeySystem = false
+})
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local Player = Players.LocalPlayer
+
+local CombatTab = Window:CreateTab("combat", 4483362458)
+local VisualsTab = Window:CreateTab("visuals", 4483362458)
+local MovementTab = Window:CreateTab("movement tech", 4483362458)
+
+local HitboxScale = 1
+local HitboxEnabled = false
+local AuraEnabled = false
+local AuraRange = 5
+local AuraCooldown = 0.3
+local LastTagTime = 0
+
+local EspEnabled = false
+local EspBox = true
+local EspFilled = false
+local EspOutline = true
+local EspTracers = false
+local EspNames = true
+local EspHealth = true
+local EspDistance = true
+local EspMaxDistance = 1000
+
+local EspCache = {}
+local OriginalSizes = {}
+
+local DrawingAvailable = nil
+
+local InfJumpEnabled = false
+local UltimateTechEnabled = false
+local UltimateTechKey = Enum.KeyCode.F
+local UltimateTechFlingVector = Vector3.new(500, 100, 0)
+
+local CFrameWalkEnabled = false
+local CFrameWalkSpeed = 50
+
+local FloatEnabled = false
+local FloatSpeed = 50
+local FloatUp = false
+local FloatDown = false
+local FloatBV = nil
+
+local function MakeColor(R, G, B)
+    return Color3.fromRGB(R, G, B)
+end
+
+local function UpdateHitboxes()
+    for _, Other in next, Players:GetPlayers() do
+        if Other ~= Player and Other.Character then
+            local HRP = Other.Character:FindFirstChild("HumanoidRootPart")
+            if HRP then
+                if not OriginalSizes[Other] then
+                    OriginalSizes[Other] = HRP.Size
+                end
+                HRP.Size = Vector3.new(2 * HitboxScale, 2 * HitboxScale, 1 * HitboxScale)
+                HRP.Transparency = 0.7
+                HRP.CanCollide = false
+            end
+        end
+    end
+end
+
+local function ResetHitboxes()
+    for _, Other in next, Players:GetPlayers() do
+        if Other ~= Player and Other.Character then
+            local HRP = Other.Character:FindFirstChild("HumanoidRootPart")
+            if HRP then
+                if OriginalSizes[Other] then
+                    HRP.Size = OriginalSizes[Other]
+                    OriginalSizes[Other] = nil
+                else
+                    HRP.Size = Vector3.new(2, 2, 1)
+                end
+                HRP.Transparency = 0
+                HRP.CanCollide = true
+            end
+        end
+    end
+    OriginalSizes = {}
+end
+
+local function ClickTagButton()
+    local PG = Player:FindFirstChild("PlayerGui")
+    if not PG then return false end
+    local Touch = PG:FindFirstChild("TouchGuiUTG")
+    if not Touch then return false end
+    local UTG = Touch:FindFirstChild("UTGButtons")
+    if not UTG then return false end
+    local Btn = UTG:FindFirstChild("TagButton")
+    if not Btn then return false end
+    local Connections = getconnections(Btn.Activated)
+    if not Connections or #Connections == 0 then return false end
+    for Index = 1, #Connections do
+        local Connection = Connections[Index]
+        if Connection then
+            Connection:Fire()
+            return true
+        end
+    end
+    return false
+end
+
+local function GetRemote(Name)
+    for _, V in next, getgc(true) do
+        if typeof(V) == "Instance" and V:IsA("RemoteEvent") and V.Name == Name then
+            return V
+        end
+        if typeof(V) == "Instance" and V:IsA("RemoteFunction") and V.Name == Name then
+            return V
+        end
+    end
+    return nil
+end
+
+local function TagAuraTick()
+    if tick() - LastTagTime < AuraCooldown then return end
+    local MyChar = Player.Character
+    if not MyChar then return end
+    local MyHRP = MyChar:FindFirstChild("HumanoidRootPart")
+    if not MyHRP then return end
+
+    local ClosestTarget = nil
+    local ClosestDistance = AuraRange
+    for _, Other in next, Players:GetPlayers() do
+        if Other ~= Player and Other.Character then
+            local HRP = Other.Character:FindFirstChild("HumanoidRootPart")
+            if HRP then
+                local Dist = (MyHRP.Position - HRP.Position).Magnitude
+                if Dist <= ClosestDistance then
+                    ClosestDistance = Dist
+                    ClosestTarget = Other
+                end
+            end
+        end
+    end
+
+    if not ClosestTarget then return end
+
+    if ClickTagButton() then
+        LastTagTime = tick()
+        return
+    end
+
+    local Force = GetRemote("ForcePlayerTag")
+    if Force then
+        Force:FireServer(ClosestTarget)
+        LastTagTime = tick()
+    end
+end
+
+local function CreateEspObject()
+    local Obj = {}
+
+    Obj.Box = Drawing.new("Square")
+    Obj.Box.Thickness = 1
+    Obj.Box.Filled = false
+    Obj.Box.Color = MakeColor(255, 255, 255)
+    Obj.Box.Visible = false
+    Obj.Box.ZIndex = 5
+
+    Obj.Outline = Drawing.new("Square")
+    Obj.Outline.Thickness = 3
+    Obj.Outline.Filled = false
+    Obj.Outline.Color = MakeColor(0, 0, 0)
+    Obj.Outline.Visible = false
+    Obj.Outline.ZIndex = 4
+
+    Obj.Fill = Drawing.new("Square")
+    Obj.Fill.Thickness = 1
+    Obj.Fill.Filled = true
+    Obj.Fill.Color = MakeColor(255, 255, 255)
+    Obj.Fill.Transparency = 0.75
+    Obj.Fill.Visible = false
+    Obj.Fill.ZIndex = 3
+
+    Obj.Name = Drawing.new("Text")
+    Obj.Name.Center = true
+    Obj.Name.Outline = true
+    Obj.Name.OutlineColor = MakeColor(0, 0, 0)
+    Obj.Name.Color = MakeColor(255, 255, 255)
+    Obj.Name.Size = 13
+    Obj.Name.Font = 2
+    Obj.Name.Visible = false
+    Obj.Name.ZIndex = 5
+
+    Obj.HealthBG = Drawing.new("Square")
+    Obj.HealthBG.Thickness = 1
+    Obj.HealthBG.Filled = true
+    Obj.HealthBG.Color = MakeColor(0, 0, 0)
+    Obj.HealthBG.Visible = false
+    Obj.HealthBG.ZIndex = 4
+
+    Obj.HealthBar = Drawing.new("Square")
+    Obj.HealthBar.Thickness = 1
+    Obj.HealthBar.Filled = true
+    Obj.HealthBar.Color = MakeColor(0, 255, 0)
+    Obj.HealthBar.Visible = false
+    Obj.HealthBar.ZIndex = 5
+
+    Obj.HealthText = Drawing.new("Text")
+    Obj.HealthText.Outline = true
+    Obj.HealthText.OutlineColor = MakeColor(0, 0, 0)
+    Obj.HealthText.Color = MakeColor(255, 255, 255)
+    Obj.HealthText.Size = 11
+    Obj.HealthText.Font = 2
+    Obj.HealthText.Visible = false
+    Obj.HealthText.ZIndex = 5
+
+    Obj.DistanceText = Drawing.new("Text")
+    Obj.DistanceText.Center = true
+    Obj.DistanceText.Outline = true
+    Obj.DistanceText.OutlineColor = MakeColor(0, 0, 0)
+    Obj.DistanceText.Color = MakeColor(200, 200, 200)
+    Obj.DistanceText.Size = 11
+    Obj.DistanceText.Font = 2
+    Obj.DistanceText.Visible = false
+    Obj.DistanceText.ZIndex = 5
+
+    Obj.Tracer = Drawing.new("Line")
+    Obj.Tracer.Thickness = 1
+    Obj.Tracer.Color = MakeColor(255, 255, 255)
+    Obj.Tracer.Visible = false
+    Obj.Tracer.ZIndex = 5
+
+    Obj.Connected = true
+    return Obj
+end
+
+local function DestroyEsp(Obj)
+    if not Obj or not Obj.Connected then return end
+    pcall(function() Obj.Box:Remove() end)
+    pcall(function() Obj.Outline:Remove() end)
+    pcall(function() Obj.Fill:Remove() end)
+    pcall(function() Obj.Name:Remove() end)
+    pcall(function() Obj.HealthBG:Remove() end)
+    pcall(function() Obj.HealthBar:Remove() end)
+    pcall(function() Obj.HealthText:Remove() end)
+    pcall(function() Obj.DistanceText:Remove() end)
+    pcall(function() Obj.Tracer:Remove() end)
+    Obj.Connected = false
+end
+
+local function HideEsp(Obj)
+    if not Obj or not Obj.Connected then return end
+    Obj.Box.Visible = false
+    Obj.Outline.Visible = false
+    Obj.Fill.Visible = false
+    Obj.Name.Visible = false
+    Obj.HealthBG.Visible = false
+    Obj.HealthBar.Visible = false
+    Obj.HealthText.Visible = false
+    Obj.DistanceText.Visible = false
+    Obj.Tracer.Visible = false
+end
+
+local function UpdateEsp()
+    if DrawingAvailable == nil then
+        DrawingAvailable = pcall(function()
+            local Test = Drawing.new("Square")
+            Test:Remove()
+            return true
+        end)
+        if not DrawingAvailable then
+            EspEnabled = false
+            return
+        end
+    end
+    if not DrawingAvailable then return end
+
+    local ActivePlayers = {}
+
+    for _, Other in next, Players:GetPlayers() do
+        if Other ~= Player then
+            local Char = Other.Character
+            local HasValidChar = Char
+                and Char:FindFirstChild("HumanoidRootPart")
+                and Char:FindFirstChild("Humanoid")
+                and Char.Humanoid.Health > 0
+
+            if HasValidChar then
+                ActivePlayers[Other] = true
+
+                if not EspCache[Other] or not EspCache[Other].Connected then
+                    EspCache[Other] = CreateEspObject()
+                end
+                local Obj = EspCache[Other]
+
+                if Obj.Connected then
+                    local HRP = Char.HumanoidRootPart
+                    local Hum = Char.Humanoid
+                    local MyChar = Player.Character
+                    local MyHRP = MyChar and MyChar:FindFirstChild("HumanoidRootPart")
+
+                    local Pos, OnScreen = workspace.CurrentCamera:WorldToViewportPoint(HRP.Position)
+                    if not OnScreen then
+                        HideEsp(Obj)
+                    else
+                        local Dist = MyHRP and (MyHRP.Position - HRP.Position).Magnitude or 0
+                        if Dist > EspMaxDistance then
+                            HideEsp(Obj)
+                        else
+                            local FOV = workspace.CurrentCamera.FieldOfView
+                            if FOV <= 0 then FOV = 70 end
+                            local ScaleFactor = 1 / (Pos.Z * math.tan(math.rad(FOV * 0.5)) * 2)
+                            local BoxSize = Vector2.new(4, 6) * ScaleFactor * 600
+                            local Width = math.clamp(BoxSize.X, 20, 400)
+                            local Height = math.clamp(BoxSize.Y, 30, 600)
+                            local X = Pos.X - Width / 2
+                            local Y = Pos.Y - Height / 2
+
+                            Obj.Box.Size = Vector2.new(Width, Height)
+                            Obj.Box.Position = Vector2.new(X, Y)
+                            Obj.Box.Visible = EspBox
+
+                            Obj.Outline.Size = Vector2.new(Width, Height)
+                            Obj.Outline.Position = Vector2.new(X, Y)
+                            Obj.Outline.Visible = EspBox and EspOutline
+
+                            Obj.Fill.Size = Vector2.new(Width, Height)
+                            Obj.Fill.Position = Vector2.new(X, Y)
+                            Obj.Fill.Visible = EspFilled
+
+                            Obj.Name.Position = Vector2.new(Pos.X, Y - 14)
+                            Obj.Name.Text = Other.DisplayName
+                            Obj.Name.Visible = EspNames
+
+                            local HP_Pct = math.clamp(Hum.Health / Hum.MaxHealth, 0, 1)
+                            local BarWidth = 2
+                            local BarX = X - BarWidth - 3
+                            Obj.HealthBG.Size = Vector2.new(BarWidth, Height)
+                            Obj.HealthBG.Position = Vector2.new(BarX, Y)
+                            Obj.HealthBG.Visible = EspHealth
+
+                            Obj.HealthBar.Size = Vector2.new(BarWidth, Height * HP_Pct)
+                            Obj.HealthBar.Position = Vector2.new(BarX, Y + Height * (1 - HP_Pct))
+                            Obj.HealthBar.Color = Color3.fromHSV(HP_Pct * 0.33, 1, 1)
+                            Obj.HealthBar.Visible = EspHealth
+
+                            Obj.HealthText.Position = Vector2.new(BarX - 32, Y + Height - 14)
+                            Obj.HealthText.Text = tostring(math.floor(Hum.Health))
+                            Obj.HealthText.Visible = EspHealth
+
+                            Obj.DistanceText.Position = Vector2.new(Pos.X, Y + Height + 2)
+                            Obj.DistanceText.Text = tostring(math.floor(Dist)) .. " studs"
+                            Obj.DistanceText.Visible = EspDistance
+
+                            Obj.Tracer.From = Vector2.new(
+                                workspace.CurrentCamera.ViewportSize.X / 2,
+                                workspace.CurrentCamera.ViewportSize.Y
+                            )
+                            Obj.Tracer.To = Vector2.new(Pos.X, Pos.Y + Height / 2)
+                            Obj.Tracer.Visible = EspTracers
+                        end
+                    end
+                end
+            else
+                if EspCache[Other] and EspCache[Other].Connected then
+                    HideEsp(EspCache[Other])
+                end
+            end
+        end
+    end
+
+    for CachedPlayer, Obj in pairs(EspCache) do
+        if not ActivePlayers[CachedPlayer] then
+            DestroyEsp(Obj)
+            EspCache[CachedPlayer] = nil
+        end
+    end
+end
+
+local function HideAllEsp()
+    for _, Obj in pairs(EspCache) do
+        HideEsp(Obj)
+    end
+end
+
+local function RefreshEspVisibility()
+    if not EspEnabled then return end
+    UpdateEsp()
+end
+
+local function GetCharacter()
+    return Player.Character
+end
+
+local function GetHumanoid()
+    local Char = GetCharacter()
+    return Char and Char:FindFirstChildOfClass("Humanoid")
+end
+
+local function GetRootPart()
+    local Char = GetCharacter()
+    return Char and Char:FindFirstChild("HumanoidRootPart")
+end
+
+local function DoFling()
+    local HRP = GetRootPart()
+    if not HRP then return end
+    HRP.AssemblyLinearVelocity = UltimateTechFlingVector
+end
+
+UserInputService.JumpRequest:Connect(function()
+    if InfJumpEnabled then
+        local Humanoid = GetHumanoid()
+        if Humanoid then
+            Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(Input, Processed)
+    if Processed then return end
+    if UltimateTechEnabled and Input.KeyCode == UltimateTechKey then
+        DoFling()
+    end
+    if FloatEnabled then
+        if Input.KeyCode == Enum.KeyCode.E then
+            FloatUp = true
+        elseif Input.KeyCode == Enum.KeyCode.R then
+            FloatDown = true
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(Input, Processed)
+    if Processed then return end
+    if FloatEnabled then
+        if Input.KeyCode == Enum.KeyCode.E then
+            FloatUp = false
+        elseif Input.KeyCode == Enum.KeyCode.R then
+            FloatDown = false
+        end
+    end
+end)
+
+RunService.RenderStepped:Connect(function(Delta)
+    pcall(function()
+        if HitboxEnabled and HitboxScale > 1 then
+            UpdateHitboxes()
+        elseif not HitboxEnabled then
+            ResetHitboxes()
+        end
+
+        if AuraEnabled then
+            TagAuraTick()
+        end
+
+        if EspEnabled then
+            UpdateEsp()
+        end
+        
+        if CFrameWalkEnabled then
+            local Hum = GetHumanoid()
+            local HRP = GetRootPart()
+            if Hum and HRP and Hum.MoveDirection.Magnitude > 0 then
+                HRP.CFrame = HRP.CFrame + (Hum.MoveDirection * (CFrameWalkSpeed * Delta))
+            end
+        end
+
+        if FloatEnabled then
+            local HRP = GetRootPart()
+            if HRP then
+                if not FloatBV or FloatBV.Parent ~= HRP then
+                    if FloatBV then FloatBV:Destroy() end
+                    FloatBV = Instance.new("BodyVelocity")
+                    FloatBV.MaxForce = Vector3.new(0, 100000, 0)
+                    FloatBV.Velocity = Vector3.new(0, 0, 0)
+                    FloatBV.Parent = HRP
+                end
+                local VelY = 0
+                if FloatUp then VelY = FloatSpeed end
+                if FloatDown then VelY = -FloatSpeed end
+                FloatBV.Velocity = Vector3.new(0, VelY, 0)
+            end
+        else
+            if FloatBV then
+                FloatBV:Destroy()
+                FloatBV = nil
+            end
+        end
+    end)
+end)
+
+local BuildOk, BuildErr
+
+BuildOk, BuildErr = pcall(function()
+    CombatTab:CreateSection("hitbox expander")
+
+    CombatTab:CreateSlider({
+        Name = "hitbox size",
+        Range = {1, 10},
+        Increment = 1,
+        Suffix = "x",
+        CurrentValue = 1,
+        Flag = "hitbox_slider",
+        Callback = function(Value)
+            HitboxScale = Value
+        end
+    })
+
+    CombatTab:CreateToggle({
+        Name = "enable hitbox",
+        CurrentValue = false,
+        Flag = "hitbox_toggle",
+        Callback = function(Value)
+            HitboxEnabled = Value
+            if not Value then
+                ResetHitboxes()
+            end
+        end
+    })
+end)
+
+BuildOk, BuildErr = pcall(function()
+    CombatTab:CreateSection("tag aura")
+
+    CombatTab:CreateToggle({
+        Name = "enable tag aura",
+        CurrentValue = false,
+        Flag = "aura_toggle",
+        Callback = function(Value)
+            AuraEnabled = Value
+        end
+    })
+
+    CombatTab:CreateSlider({
+        Name = "aura range",
+        Range = {1, 50},
+        Increment = 1,
+        Suffix = " studs",
+        CurrentValue = 5,
+        Flag = "aura_slider",
+        Callback = function(Value)
+            AuraRange = Value
+        end
+    })
+end)
+
+BuildOk, BuildErr = pcall(function()
+    VisualsTab:CreateSection("esp")
+
+    VisualsTab:CreateToggle({
+        Name = "enable esp",
+        CurrentValue = false,
+        Flag = "esp_toggle",
+        Callback = function(Value)
+            EspEnabled = Value
+            if Value then
+                UpdateEsp()
+            else
+                HideAllEsp()
+            end
+        end
+    })
+
+    VisualsTab:CreateToggle({
+        Name = "boxes",
+        CurrentValue = true,
+        Flag = "esp_box",
+        Callback = function(Value)
+            EspBox = Value
+            RefreshEspVisibility()
+        end
+    })
+
+    VisualsTab:CreateToggle({
+        Name = "box outline",
+        CurrentValue = true,
+        Flag = "esp_outline",
+        Callback = function(Value)
+            EspOutline = Value
+            RefreshEspVisibility()
+        end
+    })
+
+    VisualsTab:CreateToggle({
+        Name = "filled box",
+        CurrentValue = false,
+        Flag = "esp_filled",
+        Callback = function(Value)
+            EspFilled = Value
+            RefreshEspVisibility()
+        end
+    })
+
+    VisualsTab:CreateToggle({
+        Name = "tracers",
+        CurrentValue = false,
+        Flag = "esp_tracers",
+        Callback = function(Value)
+            EspTracers = Value
+            RefreshEspVisibility()
+        end
+    })
+
+    VisualsTab:CreateToggle({
+        Name = "names",
+        CurrentValue = true,
+        Flag = "esp_names",
+        Callback = function(Value)
+            EspNames = Value
+            RefreshEspVisibility()
+        end
+    })
+
+    VisualsTab:CreateToggle({
+        Name = "health bar",
+        CurrentValue = true,
+        Flag = "esp_health",
+        Callback = function(Value)
+            EspHealth = Value
+            RefreshEspVisibility()
+        end
+    })
+
+    VisualsTab:CreateToggle({
+        Name = "distance",
+        CurrentValue = true,
+        Flag = "esp_distance",
+        Callback = function(Value)
+            EspDistance = Value
+            RefreshEspVisibility()
+        end
+    })
+
+    VisualsTab:CreateSlider({
+        Name = "max distance",
+        Range = {100, 5000},
+        Increment = 100,
+        Suffix = " studs",
+        CurrentValue = 1000,
+        Flag = "esp_max_distance",
+        Callback = function(Value)
+            EspMaxDistance = Value
+            RefreshEspVisibility()
+        end
+    })
+end)
+
+BuildOk, BuildErr = pcall(function()
+    MovementTab:CreateSection("ultimate tech")
+
+    MovementTab:CreateToggle({
+        Name = "enable ultimate tech",
+        CurrentValue = false,
+        Flag = "ultimate_toggle",
+        Callback = function(Value)
+            UltimateTechEnabled = Value
+        end
+    })
+
+    MovementTab:CreateKeybind({
+        Name = "ultimate tech keybind",
+        CurrentKeybind = "F",
+        Flag = "ultimate_keybind",
+        Callback = function(Value)
+            if typeof(Value) == "EnumItem" then
+                UltimateTechKey = Value
+            elseif type(Value) == "string" and Value ~= "" then
+                local Ok, Kb = pcall(function()
+                    return Enum.KeyCode[Value]
+                end)
+                if Ok and Kb then
+                    UltimateTechKey = Kb
+                end
+            end
+        end
+    })
+
+    MovementTab:CreateSection("cframe walkspeed")
+
+    MovementTab:CreateInput({
+        Name = "speed amount",
+        CurrentValue = "",
+        PlaceholderText = "e.g. 50",
+        Flag = "cframe_ws_input",
+        Callback = function(Value)
+            CFrameWalkSpeed = tonumber(Value) or 50
+        end
+    })
+
+    MovementTab:CreateToggle({
+        Name = "enable cframe walkspeed",
+        CurrentValue = false,
+        Flag = "cframe_ws_toggle",
+        Callback = function(Value)
+            CFrameWalkEnabled = Value
+        end
+    })
+
+    MovementTab:CreateSection("float tech")
+
+    MovementTab:CreateToggle({
+        Name = "enable float",
+        CurrentValue = false,
+        Flag = "float_toggle",
+        Callback = function(Value)
+            FloatEnabled = Value
+            if not Value and FloatBV then
+                FloatBV:Destroy()
+                FloatBV = nil
+                FloatUp = false
+                FloatDown = false
+            end
+        end
+    })
+
+    MovementTab:CreateSlider({
+        Name = "float speed",
+        Range = {10, 200},
+        Increment = 5,
+        Suffix = "",
+        CurrentValue = 50,
+        Flag = "float_speed",
+        Callback = function(Value)
+            FloatSpeed = Value
+        end
+    })
+
+    MovementTab:CreateSection("infinite jump")
+
+    MovementTab:CreateToggle({
+        Name = "enable infinite jump",
+        CurrentValue = false,
+        Flag = "inf_jump_toggle",
+        Callback = function(Value)
+            InfJumpEnabled = Value
+        end
+    })
+end)
+
+print("made by yua, enjoy, also sub vroski (for float the controls are e for up r for down)")
